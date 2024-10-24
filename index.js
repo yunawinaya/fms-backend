@@ -2,6 +2,8 @@ const express = require("express");
 const { Pool } = require("pg");
 const dotenv = require("dotenv");
 const cors = require("cors");
+const multer = require("multer");
+const path = require("path");
 
 dotenv.config();
 
