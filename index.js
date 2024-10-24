@@ -147,6 +147,66 @@ app.post("/api/files", upload.single("file"), async (req, res) => {
   }
 });
 
+// Delete file from Google Cloud Storage and database
+app.delete("/api/files/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Retrieve the file information from the database
+    const fileResult = await pool.query("SELECT * FROM files WHERE id = $1", [
+      id,
+    ]);
+    const file = fileResult.rows[0];
+
+    if (!file) {
+      return res.status(404).send("File not found");
+    }
+
+    // Delete the file from Google Cloud Storage
+    const gcsFile = bucket.file(file.url.split(`${bucket.name}/`)[1]);
+    await gcsFile.delete();
+
+    // Delete the file record from the database
+    await pool.query("DELETE FROM files WHERE id = $1", [id]);
+
+    res.status(200).send("File deleted successfully");
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error deleting file");
+  }
+});
+
+// Delete folder and its contents from database and storage
+app.delete("/api/folders/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Retrieve the folder's files
+    const filesResult = await pool.query(
+      "SELECT * FROM files WHERE folder_id = $1",
+      [id]
+    );
+    const files = filesResult.rows;
+
+    // Delete files from Google Cloud Storage
+    for (const file of files) {
+      const gcsFile = bucket.file(file.url.split(`${bucket.name}/`)[1]);
+      await gcsFile.delete();
+    }
+
+    // Delete files from the database
+    await pool.query("DELETE FROM files WHERE folder_id = $1", [id]);
+
+    // Delete the folder from the database
+    await pool.query("DELETE FROM folders WHERE id = $1", [id]);
+
+    res.status(200).send("Folder and its contents deleted successfully");
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error deleting folder");
+  }
+});
+
 const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
