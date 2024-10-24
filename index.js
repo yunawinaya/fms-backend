@@ -20,22 +20,22 @@ const pool = new Pool({
   },
 });
 
-// Multer setup for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, "uploads");
-    // Ensure the directory exists
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir);
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  },
+const keyFilePath = path.join("/tmp", "gcloud-key.json");
+const keyBase64 = process.env.GCLOUD_KEY_BASE64;
+const keyDecoded = Buffer.from(keyBase64, "base64").toString("utf8");
+
+fs.writeFileSync(keyFilePath, keyDecoded);
+
+// Initialize Google Cloud Storage with the decoded key
+const storage = new Storage({
+  keyFilename: keyFilePath,
+  projectId: process.env.GCLOUD_PROJECT_ID,
 });
 
-const upload = multer({ storage: storage });
+const bucket = storage.bucket(process.env.GCLOUD_STORAGE_BUCKET);
+
+// Multer setup for file uploads (in memory storage)
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Routes
 app.get("/", (req, res) => res.send("File Management System"));
@@ -99,27 +99,47 @@ app.post("/api/folders", async (req, res) => {
   }
 });
 
-// File upload route
+// Upload file to Google Cloud Storage and add entry to DB
 app.post("/api/files", upload.single("file"), async (req, res) => {
   try {
     const { folder_id } = req.body;
-    const { filename, originalname, size } = req.file;
-    const currentDate = new Date();
+    const file = req.file;
+    const gcsFileName = `${Date.now()}-${file.originalname}`;
+    const blob = bucket.file(gcsFileName);
+    const blobStream = blob.createWriteStream({
+      resumable: false,
+      metadata: {
+        contentType: file.mimetype,
+      },
+    });
 
-    const result = await pool.query(
-      "INSERT INTO files (name, file_type, size, date_created, last_modified, folder_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
-      [
-        originalname,
-        path.extname(originalname).substring(1),
-        size,
-        currentDate,
-        currentDate,
-        folder_id,
-      ]
-    );
+    blobStream.on("error", (err) => {
+      console.error(err);
+      res.status(500).send("Error uploading file to Google Cloud Storage");
+    });
 
-    const newFile = result.rows[0];
-    res.status(201).json(newFile);
+    blobStream.on("finish", async () => {
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`;
+
+      // Insert file record in the database
+      const result = await pool.query(
+        "INSERT INTO files (name, file_type, size, date_created, last_modified, folder_id, url) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+        [
+          file.originalname,
+          path.extname(file.originalname).substring(1),
+          file.size,
+          new Date(),
+          new Date(),
+          folder_id,
+          publicUrl,
+        ]
+      );
+
+      const newFile = result.rows[0];
+      res.status(201).json(newFile);
+    });
+
+    blobStream.end(file.buffer);
   } catch (err) {
     console.error(err);
     res.status(500).send("Server Error");
