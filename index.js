@@ -207,6 +207,52 @@ app.delete("/api/folders/:id", async (req, res) => {
   }
 });
 
+// Patch request to rename a file
+app.patch("/api/files/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name } = req.body;
+
+  try {
+    // Update the file name in the database
+    const result = await pool.query(
+      "UPDATE files SET name = $1, last_modified = $2 WHERE id = $3 RETURNING *",
+      [name, new Date(), id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).send("File not found");
+    }
+
+    res.status(200).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error renaming file");
+  }
+});
+
+// Patch request to rename a folder
+app.patch("/api/folders/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name } = req.body;
+
+  try {
+    // Update the folder name in the database
+    const result = await pool.query(
+      "UPDATE folders SET name = $1, last_modified = $2 WHERE id = $3 RETURNING *",
+      [name, new Date(), id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).send("Folder not found");
+    }
+
+    res.status(200).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error renaming folder");
+  }
+});
+
 const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
