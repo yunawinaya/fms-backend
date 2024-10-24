@@ -6,15 +6,7 @@ const cors = require("cors");
 dotenv.config();
 
 const app = express();
-
-// Update the CORS options to allow your frontend origin
-const corsOptions = {
-  origin: "http://localhost:8080", // Allow only this origin
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // Specify allowed methods
-  credentials: true, // Allow credentials (cookies, authorization headers)
-};
-
-app.use(cors(corsOptions));
+app.use(cors());
 app.use(express.json());
 
 // Set up PostgreSQL connection
@@ -23,11 +15,6 @@ const pool = new Pool({
   ssl: {
     rejectUnauthorized: false,
   },
-});
-
-pool.on("error", (err, client) => {
-  console.error("Unexpected error on idle client", err);
-  process.exit(-1);
 });
 
 // Routes
@@ -49,5 +36,3 @@ const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
-module.exports = app;
