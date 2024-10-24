@@ -293,48 +293,36 @@ app.get("/api/files/:id/download", async (req, res) => {
   }
 });
 
-// Route to download a folder (zipped)
-app.get("/api/folders/:id/download", async (req, res) => {
-  const { id } = req.params;
-
+// Route to download a file
+app.get("/api/files/:id/download", async (req, res) => {
   try {
-    const folderResult = await pool.query(
-      "SELECT * FROM folders WHERE id = $1",
-      [id]
-    );
-    const folder = folderResult.rows[0];
+    const fileId = req.params.id;
 
-    if (!folder) {
-      return res.status(404).send("Folder not found");
+    // Retrieve file information from the database
+    const file = await getFileFromDatabase(fileId);
+    if (!file) {
+      return res.status(404).send("File not found");
     }
 
-    // Retrieve the folder's files
-    const filesResult = await pool.query(
-      "SELECT * FROM files WHERE folder_id = $1",
-      [id]
-    );
-    const files = filesResult.rows;
+    // Get the file from GCS
+    const gcsFile = bucket.file(file.url.split(`${bucket.name}/`)[1]);
 
-    if (files.length === 0) {
-      return res.status(404).send("No files in this folder to download");
-    }
+    // Set headers for file download
+    res.setHeader("Content-Disposition", `attachment; filename="${file.name}"`);
+    res.setHeader("Content-Type", file.file_type);
 
-    const archiver = require("archiver");
-    const archive = archiver("zip", { zlib: { level: 9 } });
+    // Create a read stream from GCS and pipe it directly to the response
+    const fileStream = gcsFile.createReadStream();
 
-    res.attachment(`${folder.name}.zip`);
-    archive.pipe(res);
+    fileStream.on("error", (err) => {
+      console.error("Error reading file stream:", err);
+      res.status(500).send("Error downloading file");
+    });
 
-    for (const file of files) {
-      const gcsFile = bucket.file(file.url.split(`${bucket.name}/`)[1]);
-      const stream = gcsFile.createReadStream();
-      archive.append(stream, { name: file.name });
-    }
-
-    await archive.finalize();
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Error downloading folder");
+    fileStream.pipe(res);
+  } catch (error) {
+    console.error("Error downloading file:", error);
+    res.status(500).send("Error generating download link");
   }
 });
 
