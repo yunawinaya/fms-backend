@@ -106,7 +106,7 @@ app.post("/api/files", upload.single("file"), async (req, res) => {
     const file = req.file;
 
     if (!file) {
-      return res.status(400).send("No file uploaded");
+      return res.status(400).json({ error: "No file uploaded" });
     }
 
     // File metadata
@@ -131,8 +131,8 @@ app.post("/api/files", upload.single("file"), async (req, res) => {
     const newFile = result.rows[0];
     res.status(201).json(newFile);
   } catch (err) {
-    console.error(err);
-    res.status(500).send("Server Error");
+    console.error("Error processing file upload:", err);
+    res.status(500).json({ error: err.message || "Server Error" });
   }
 });
 
