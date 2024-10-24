@@ -132,7 +132,7 @@ app.post("/api/files", upload.single("file"), async (req, res) => {
     res.status(201).json(newFile);
   } catch (err) {
     console.error("Error processing file upload:", err);
-    res.status(500).json({ error: err.message || "Server Error" });
+    res.status(500).json({ error: "Server Error", details: err.message });
   }
 });
 
