@@ -6,7 +6,15 @@ const cors = require("cors");
 dotenv.config();
 
 const app = express();
-app.use(cors());
+
+// Update the CORS options to allow your frontend origin
+const corsOptions = {
+  origin: "http://localhost:8080", // Allow only this origin
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // Specify allowed methods
+  credentials: true, // Allow credentials (cookies, authorization headers)
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Set up PostgreSQL connection
@@ -36,3 +44,5 @@ const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+module.exports = app;
