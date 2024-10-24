@@ -253,6 +253,74 @@ app.patch("/api/folders/:id", async (req, res) => {
   }
 });
 
+// Route to download a file
+app.get("/api/files/:id/download", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Retrieve the file information from the database
+    const fileResult = await pool.query("SELECT * FROM files WHERE id = $1", [
+      id,
+    ]);
+    const file = fileResult.rows[0];
+
+    if (!file) {
+      return res.status(404).send("File not found");
+    }
+
+    // Redirect to the file's public URL for download
+    res.redirect(file.url);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error downloading file");
+  }
+});
+
+// Route to download a folder (zipped)
+app.get("/api/folders/:id/download", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const folderResult = await pool.query(
+      "SELECT * FROM folders WHERE id = $1",
+      [id]
+    );
+    const folder = folderResult.rows[0];
+
+    if (!folder) {
+      return res.status(404).send("Folder not found");
+    }
+
+    // Retrieve the folder's files
+    const filesResult = await pool.query(
+      "SELECT * FROM files WHERE folder_id = $1",
+      [id]
+    );
+    const files = filesResult.rows;
+
+    if (files.length === 0) {
+      return res.status(404).send("No files in this folder to download");
+    }
+
+    const archiver = require("archiver");
+    const archive = archiver("zip", { zlib: { level: 9 } });
+
+    res.attachment(`${folder.name}.zip`);
+    archive.pipe(res);
+
+    for (const file of files) {
+      const gcsFile = bucket.file(file.url.split(`${bucket.name}/`)[1]);
+      const stream = gcsFile.createReadStream();
+      archive.append(stream, { name: file.name });
+    }
+
+    await archive.finalize();
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error downloading folder");
+  }
+});
+
 const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
