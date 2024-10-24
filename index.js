@@ -3,8 +3,8 @@ const { Pool } = require("pg");
 const dotenv = require("dotenv");
 const cors = require("cors");
 const multer = require("multer");
+const { Storage } = require("@google-cloud/storage");
 const path = require("path");
-const fs = require("fs");
 
 dotenv.config();
 
