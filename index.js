@@ -30,6 +30,16 @@ app.get("/api/folders", async (req, res) => {
   }
 });
 
+app.get("/api/files", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM files");
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Server Error");
+  }
+});
+
 // Additional routes for CRUD operations
 
 const PORT = 3000;
