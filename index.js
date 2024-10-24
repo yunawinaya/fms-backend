@@ -5,6 +5,7 @@ const cors = require("cors");
 const multer = require("multer");
 const { Storage } = require("@google-cloud/storage");
 const path = require("path");
+const { fsync } = require("fs");
 
 dotenv.config();
 
@@ -24,7 +25,7 @@ const keyFilePath = path.join("/tmp", "gcloud-key.json");
 const keyBase64 = process.env.GCLOUD_KEY_BASE64;
 const keyDecoded = Buffer.from(keyBase64, "base64").toString("utf8");
 
-fs.writeFileSync(keyFilePath, keyDecoded);
+fsync.writeFileSync(keyFilePath, keyDecoded);
 
 // Initialize Google Cloud Storage with the decoded key
 const storage = new Storage({
