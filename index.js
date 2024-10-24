@@ -85,6 +85,55 @@ app.post("/api/folders", async (req, res) => {
   }
 });
 
+// Set up multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "uploads/"); // Save files in the 'uploads' directory
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  },
+});
+
+const upload = multer({ storage });
+
+// Endpoint to upload files
+app.post("/api/files", upload.single("file"), async (req, res) => {
+  try {
+    const { folder_id } = req.body;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).send("No file uploaded");
+    }
+
+    // File metadata
+    const filePath = file.path;
+    const fileType = path.extname(file.originalname).substring(1);
+    const fileSize = file.size;
+
+    // Insert file metadata into the database
+    const result = await pool.query(
+      "INSERT INTO files (name, file_type, size, date_created, last_modified, folder_id, path) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+      [
+        file.originalname,
+        fileType,
+        fileSize,
+        new Date(),
+        new Date(),
+        folder_id,
+        filePath,
+      ]
+    );
+
+    const newFile = result.rows[0];
+    res.status(201).json(newFile);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Server Error");
+  }
+});
+
 const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
