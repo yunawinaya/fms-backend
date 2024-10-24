@@ -4,6 +4,7 @@ const dotenv = require("dotenv");
 const cors = require("cors");
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
 
 dotenv.config();
 
@@ -19,28 +20,41 @@ const pool = new Pool({
   },
 });
 
+// Multer setup for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, "uploads");
+    // Ensure the directory exists
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir);
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  },
+});
+
+const upload = multer({ storage: storage });
+
 // Routes
 app.get("/", (req, res) => res.send("File Management System"));
 
 app.get("/api/folders", async (req, res) => {
   try {
-    // Fetch all folders
     const foldersResult = await pool.query("SELECT * FROM folders");
     const folders = foldersResult.rows;
 
-    // Fetch all files
     const filesResult = await pool.query("SELECT * FROM files");
     const files = filesResult.rows;
 
-    // Create a map to store folders by id
     const folderMap = new Map();
     folders.forEach((folder) => {
-      folder.children = []; // Initialize children array for each folder
-      folder.files = []; // Initialize files array for each folder
+      folder.children = [];
+      folder.files = [];
       folderMap.set(folder.id, folder);
     });
 
-    // Assign files to their respective folders
     files.forEach((file) => {
       const folder = folderMap.get(file.folder_id);
       if (folder) {
@@ -48,7 +62,6 @@ app.get("/api/folders", async (req, res) => {
       }
     });
 
-    // Nest folders based on parent_id
     const nestedFolders = [];
     folderMap.forEach((folder) => {
       if (folder.parent_id === null) {
@@ -73,7 +86,6 @@ app.post("/api/folders", async (req, res) => {
     const { name, parent_id } = req.body;
     const currentDate = new Date();
 
-    // Insert the new folder into the database
     const result = await pool.query(
       "INSERT INTO folders (name, date_created, last_modified, parent_id) VALUES ($1, $2, $3, $4) RETURNING *",
       [name, currentDate, currentDate, parent_id]
@@ -87,52 +99,30 @@ app.post("/api/folders", async (req, res) => {
   }
 });
 
-// Set up multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/"); // Save files in the 'uploads' directory
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  },
-});
-
-const upload = multer({ storage });
-
-// Endpoint to upload files
+// File upload route
 app.post("/api/files", upload.single("file"), async (req, res) => {
   try {
     const { folder_id } = req.body;
-    const file = req.file;
+    const { filename, originalname, size } = req.file;
+    const currentDate = new Date();
 
-    if (!file) {
-      return res.status(400).json({ error: "No file uploaded" });
-    }
-
-    // File metadata
-    const filePath = file.path;
-    const fileType = path.extname(file.originalname).substring(1);
-    const fileSize = file.size;
-
-    // Insert file metadata into the database
     const result = await pool.query(
-      "INSERT INTO files (name, file_type, size, date_created, last_modified, folder_id, path) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+      "INSERT INTO files (name, file_type, size, date_created, last_modified, folder_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
       [
-        file.originalname,
-        fileType,
-        fileSize,
-        new Date(),
-        new Date(),
+        originalname,
+        path.extname(originalname).substring(1),
+        size,
+        currentDate,
+        currentDate,
         folder_id,
-        filePath,
       ]
     );
 
     const newFile = result.rows[0];
     res.status(201).json(newFile);
   } catch (err) {
-    console.error("Error processing file upload:", err);
-    res.status(500).json({ error: "Server Error", details: err.message });
+    console.error(err);
+    res.status(500).send("Server Error");
   }
 });
 
