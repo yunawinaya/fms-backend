@@ -253,19 +253,32 @@ app.patch("/api/folders/:id", async (req, res) => {
   }
 });
 
+// Function to get file details from the database
+const getFileFromDatabase = async (fileId) => {
+  try {
+    const result = await pool.query("SELECT * FROM files WHERE id = $1", [
+      fileId,
+    ]);
+    return result.rows[0]; // Return the file if found
+  } catch (error) {
+    console.error("Error retrieving file from the database:", error);
+    throw error;
+  }
+};
+
 // Route to download a file
 app.get("/api/files/:id/download", async (req, res) => {
   try {
     const fileId = req.params.id;
-    // Retrieve file information from your database
+
+    // Retrieve file information from the database
     const file = await getFileFromDatabase(fileId);
     if (!file) {
       return res.status(404).send("File not found");
     }
-    const fileName = file.name;
 
     // Get the file from GCS
-    const gcsFile = bucket.file(fileName);
+    const gcsFile = bucket.file(file.url.split(`${bucket.name}/`)[1]);
 
     // Generate a signed URL
     const [url] = await gcsFile.getSignedUrl({
