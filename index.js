@@ -255,24 +255,28 @@ app.patch("/api/folders/:id", async (req, res) => {
 
 // Route to download a file
 app.get("/api/files/:id/download", async (req, res) => {
-  const { id } = req.params;
-
   try {
-    // Retrieve the file information from the database
-    const fileResult = await pool.query("SELECT * FROM files WHERE id = $1", [
-      id,
-    ]);
-    const file = fileResult.rows[0];
-
+    const fileId = req.params.id;
+    // Retrieve file information from your database
+    const file = await getFileFromDatabase(fileId);
     if (!file) {
       return res.status(404).send("File not found");
     }
+    const fileName = file.name;
 
-    // Redirect to the file's public URL for download
-    res.redirect(file.url);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Error downloading file");
+    // Get the file from GCS
+    const gcsFile = bucket.file(fileName);
+
+    // Generate a signed URL
+    const [url] = await gcsFile.getSignedUrl({
+      action: "read",
+      expires: Date.now() + 1000 * 60 * 10, // URL valid for 10 minutes
+    });
+
+    res.json({ url });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Error generating download link");
   }
 });
 
