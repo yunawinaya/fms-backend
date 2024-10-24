@@ -324,19 +324,38 @@ app.get("/api/folders/:id/download", async (req, res) => {
       return res.status(404).send("No files in this folder to download");
     }
 
+    // Use archiver to create a zip archive
     const archiver = require("archiver");
     const archive = archiver("zip", { zlib: { level: 9 } });
 
+    // Set the response headers for file download
     res.attachment(`${folder.name}.zip`);
+
+    // Pipe the archive stream to the response
     archive.pipe(res);
 
+    // Append each file from GCS to the archive
     for (const file of files) {
       const gcsFile = bucket.file(file.url.split(`${bucket.name}/`)[1]);
       const stream = gcsFile.createReadStream();
+
+      // Handle errors when reading files
+      stream.on("error", (error) => {
+        console.error(`Error reading file ${file.name} from GCS:`, error);
+        archive.emit("error", new Error(`Error reading file: ${file.name}`));
+      });
+
       archive.append(stream, { name: file.name });
     }
 
-    await archive.finalize();
+    // Finalize the archive once all files are added
+    archive.finalize();
+
+    // Handle archiver errors
+    archive.on("error", (err) => {
+      console.error("Archiver error:", err);
+      res.status(500).send("Error creating zip archive");
+    });
   } catch (err) {
     console.error(err);
     res.status(500).send("Error downloading folder");
