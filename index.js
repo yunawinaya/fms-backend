@@ -122,7 +122,6 @@ app.post("/api/files", upload.single("file"), async (req, res) => {
     blobStream.on("finish", async () => {
       const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`;
 
-      // Insert file record in the database
       const result = await pool.query(
         "INSERT INTO files (name, file_type, size, date_created, last_modified, folder_id, url) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
         [
@@ -152,7 +151,6 @@ app.delete("/api/files/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Retrieve the file information from the database
     const fileResult = await pool.query("SELECT * FROM files WHERE id = $1", [
       id,
     ]);
@@ -162,11 +160,9 @@ app.delete("/api/files/:id", async (req, res) => {
       return res.status(404).send("File not found");
     }
 
-    // Delete the file from Google Cloud Storage
     const gcsFile = bucket.file(file.url.split(`${bucket.name}/`)[1]);
     await gcsFile.delete();
 
-    // Delete the file record from the database
     await pool.query("DELETE FROM files WHERE id = $1", [id]);
 
     res.status(200).send("File deleted successfully");
@@ -181,23 +177,19 @@ app.delete("/api/folders/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Retrieve the folder's files
     const filesResult = await pool.query(
       "SELECT * FROM files WHERE folder_id = $1",
       [id]
     );
     const files = filesResult.rows;
 
-    // Delete files from Google Cloud Storage
     for (const file of files) {
       const gcsFile = bucket.file(file.url.split(`${bucket.name}/`)[1]);
       await gcsFile.delete();
     }
 
-    // Delete files from the database
     await pool.query("DELETE FROM files WHERE folder_id = $1", [id]);
 
-    // Delete the folder from the database
     await pool.query("DELETE FROM folders WHERE id = $1", [id]);
 
     res.status(200).send("Folder and its contents deleted successfully");
@@ -213,7 +205,6 @@ app.patch("/api/files/:id", async (req, res) => {
   const { name } = req.body;
 
   try {
-    // Update the file name in the database
     const result = await pool.query(
       "UPDATE files SET name = $1, last_modified = $2 WHERE id = $3 RETURNING *",
       [name, new Date(), id]
@@ -236,7 +227,6 @@ app.patch("/api/folders/:id", async (req, res) => {
   const { name } = req.body;
 
   try {
-    // Update the folder name in the database
     const result = await pool.query(
       "UPDATE folders SET name = $1, last_modified = $2 WHERE id = $3 RETURNING *",
       [name, new Date(), id]
@@ -259,7 +249,7 @@ const getFileFromDatabase = async (fileId) => {
     const result = await pool.query("SELECT * FROM files WHERE id = $1", [
       fileId,
     ]);
-    return result.rows[0]; // Return the file if found
+    return result.rows[0];
   } catch (error) {
     console.error("Error retrieving file from the database:", error);
     throw error;
@@ -271,20 +261,16 @@ app.get("/api/files/:id/download", async (req, res) => {
   try {
     const fileId = req.params.id;
 
-    // Retrieve file information from the database
     const file = await getFileFromDatabase(fileId);
     if (!file) {
       return res.status(404).send("File not found");
     }
 
-    // Get the file from GCS
     const gcsFile = bucket.file(file.url.split(`${bucket.name}/`)[1]);
 
-    // Set appropriate headers for the file download
     res.setHeader("Content-Disposition", `attachment; filename="${file.name}"`);
     res.setHeader("Content-Type", file.file_type || "application/octet-stream");
 
-    // Create a read stream from the GCS file and pipe it directly to the response
     const stream = gcsFile.createReadStream();
     stream.on("error", (err) => {
       console.error("Error reading file from GCS:", err);
@@ -313,7 +299,6 @@ app.get("/api/folders/:id/download", async (req, res) => {
       return res.status(404).send("Folder not found");
     }
 
-    // Retrieve the folder's files
     const filesResult = await pool.query(
       "SELECT * FROM files WHERE folder_id = $1",
       [id]
@@ -327,12 +312,10 @@ app.get("/api/folders/:id/download", async (req, res) => {
     const archiver = require("archiver");
     const archive = archiver("zip", { zlib: { level: 9 } });
 
-    // Set the response headers for file download
     res.attachment(`${folder.name}.zip`);
     archive.pipe(res);
 
     for (const file of files) {
-      // Ensure the file URL exists and is valid before proceeding
       if (!file.url) {
         console.error(`Missing URL for file ${file.name}`);
         archive.emit("error", new Error(`Missing URL for file: ${file.name}`));
