@@ -66,7 +66,24 @@ app.get("/api/folders", async (req, res) => {
   }
 });
 
-// Additional routes for CRUD operations
+app.post("/api/folders", async (req, res) => {
+  try {
+    const { name, parent_id } = req.body;
+    const currentDate = new Date();
+
+    // Insert the new folder into the database
+    const result = await pool.query(
+      "INSERT INTO folders (name, date_created, last_modified, parent_id) VALUES ($1, $2, $3, $4) RETURNING *",
+      [name, currentDate, currentDate, parent_id]
+    );
+
+    const newFolder = result.rows[0];
+    res.status(201).json(newFolder);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Server Error");
+  }
+});
 
 const PORT = 3000;
 app.listen(PORT, () => {
